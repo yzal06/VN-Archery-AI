@@ -12,6 +12,12 @@ export const KP = {
   R_ELBOW: 8,
   L_WRIST: 9,
   R_WRIST: 10,
+  L_HIP: 11,
+  R_HIP: 12,
+  L_KNEE: 13,
+  R_KNEE: 14,
+  L_ANKLE: 15,
+  R_ANKLE: 16,
 };
 
 export const SKELETON_EDGES = [
@@ -120,6 +126,49 @@ export class ArcheryVisionAnalyzer {
     const wristToFace = Math.hypot(drawWristNorm[0] - noseNorm[0], drawWristNorm[1] - noseNorm[1]);
     const phase = this._classifyPhase(bowElbowAngle, drawElbowAngle, wristToFace, drawSmoothSpeed);
 
+    const lowerKps = [KP.L_HIP, KP.R_HIP, KP.L_KNEE, KP.R_KNEE, KP.L_ANKLE, KP.R_ANKLE];
+    const hasFullBody =
+      keypoints.length >= 17 && lowerKps.every((idx) => keypoints[idx][2] >= this.minConf);
+
+    let stanceWidthRatio = null;
+    let torsoLeanDeg = null;
+    let hipOffsetRatio = null;
+    let minKneeAngle = null;
+
+    if (hasFullBody) {
+      const lHip = keypoints[KP.L_HIP];
+      const rHip = keypoints[KP.R_HIP];
+      const lKnee = keypoints[KP.L_KNEE];
+      const rKnee = keypoints[KP.R_KNEE];
+      const lAnkle = keypoints[KP.L_ANKLE];
+      const rAnkle = keypoints[KP.R_ANKLE];
+
+      const shoulderMid = [(lSh[0] + rSh[0]) / 2, (lSh[1] + rSh[1]) / 2];
+      const hipMid = [(lHip[0] + rHip[0]) / 2, (lHip[1] + rHip[1]) / 2];
+      const ankleMid = [(lAnkle[0] + rAnkle[0]) / 2, (lAnkle[1] + rAnkle[1]) / 2];
+
+      stanceWidthRatio = Math.hypot(rAnkle[0] - lAnkle[0], rAnkle[1] - lAnkle[1]) / shoulderWidth;
+      const torsoDx = Math.abs(shoulderMid[0] - hipMid[0]);
+      const torsoDy = Math.max(hipMid[1] - shoulderMid[1], 1e-6);
+      torsoLeanDeg = (Math.atan2(torsoDx, torsoDy) * 180) / Math.PI;
+      hipOffsetRatio = Math.abs(hipMid[0] - ankleMid[0]) / shoulderWidth;
+
+      const lKneeAngle = computeAngleDeg(lHip, lKnee, lAnkle);
+      const rKneeAngle = computeAngleDeg(rHip, rKnee, rAnkle);
+      minKneeAngle = Math.min(lKneeAngle, rKneeAngle);
+    }
+
+    const postureIssues = this._evaluatePosture({
+      shoulderTiltDeg,
+      bowElbowAngle,
+      phase,
+      hasFullBody,
+      stanceWidthRatio,
+      torsoLeanDeg,
+      hipOffsetRatio,
+      minKneeAngle,
+    });
+
     return {
       bowElbowAngle,
       drawElbowAngle,
@@ -127,7 +176,40 @@ export class ArcheryVisionAnalyzer {
       bowHandSteadiness,
       drawSmoothSpeed,
       phase,
+      hasFullBody,
+      stanceWidthRatio,
+      torsoLeanDeg,
+      hipOffsetRatio,
+      minKneeAngle,
+      postureOk: postureIssues.length === 0,
+      postureIssues,
     };
+  }
+
+  _evaluatePosture({
+    shoulderTiltDeg,
+    bowElbowAngle,
+    phase,
+    hasFullBody,
+    stanceWidthRatio,
+    torsoLeanDeg,
+    hipOffsetRatio,
+    minKneeAngle,
+  }) {
+    const issues = [];
+    if (shoulderTiltDeg > 8) issues.push("Lệch vai");
+    if ((phase === "Draw" || phase === "Aim (Hold)") && bowElbowAngle < 150) {
+      issues.push("Chùng tay cung");
+    }
+
+    if (hasFullBody) {
+      if (stanceWidthRatio < 0.85) issues.push("Đứng quá hẹp");
+      else if (stanceWidthRatio > 1.8) issues.push("Đứng quá rộng");
+      if (torsoLeanDeg > 10) issues.push("Nghiêng thân");
+      if (hipOffsetRatio > 0.3) issues.push("Lệch trọng tâm");
+      if (minKneeAngle < 160) issues.push("Chùng gối");
+    }
+    return issues;
   }
 
   _classifyPhase(bowAngle, drawAngle, wristToFace, smoothSpeed) {

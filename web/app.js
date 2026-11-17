@@ -13,6 +13,9 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 const mPhase = document.getElementById("mPhase");
+const mPosture = document.getElementById("mPosture");
+const mStance = document.getElementById("mStance");
+const mLean = document.getElementById("mLean");
 const mBow = document.getElementById("mBow");
 const mDraw = document.getElementById("mDraw");
 const mTilt = document.getElementById("mTilt");
@@ -181,10 +184,28 @@ function updateMetricsUI(metrics, fps) {
   if (!metrics) {
     mPhase.textContent = "Chưa thấy đủ khớp";
     mPhase.style.color = "#94a3b8";
+    mPosture.textContent = "—";
+    mPosture.style.color = "#94a3b8";
+    mStance.textContent = "—";
+    mLean.textContent = "—";
     return;
   }
   mPhase.textContent = metrics.phase;
   mPhase.style.color = PHASE_COLORS[metrics.phase] || "#f8fafc";
+
+  if (!metrics.hasFullBody && metrics.postureOk) {
+    mPosture.textContent = "Chưa thấy chân";
+    mPosture.style.color = "#94a3b8";
+  } else if (metrics.postureOk) {
+    mPosture.textContent = "Đúng tư thế";
+    mPosture.style.color = "#4ade80";
+  } else {
+    mPosture.textContent = metrics.postureIssues.join(", ");
+    mPosture.style.color = "#fb7185";
+  }
+
+  mStance.textContent = metrics.stanceWidthRatio !== null ? `${metrics.stanceWidthRatio.toFixed(2)}x` : "—";
+  mLean.textContent = metrics.torsoLeanDeg !== null ? `${metrics.torsoLeanDeg.toFixed(1)}°` : "—";
   mBow.textContent = `${metrics.bowElbowAngle.toFixed(1)}°`;
   mDraw.textContent = `${metrics.drawElbowAngle.toFixed(1)}°`;
   mTilt.textContent = `${metrics.shoulderTiltDeg.toFixed(1)}°`;

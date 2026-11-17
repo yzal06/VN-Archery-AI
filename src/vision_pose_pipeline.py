@@ -22,6 +22,10 @@ KP_L_WRIST = 9
 KP_R_WRIST = 10
 KP_L_HIP = 11
 KP_R_HIP = 12
+KP_L_KNEE = 13
+KP_R_KNEE = 14
+KP_L_ANKLE = 15
+KP_R_ANKLE = 16
 
 
 @dataclass
@@ -32,6 +36,13 @@ class ArcheryPoseMetrics:
     bow_hand_steadiness: float
     draw_smooth_speed: float
     phase: str
+    has_full_body: bool = False
+    stance_width_ratio: float | None = None
+    torso_lean_deg: float | None = None
+    hip_offset_ratio: float | None = None
+    min_knee_angle: float | None = None
+    posture_ok: bool = True
+    posture_issues: list[str] | None = None
 
 
 def compute_angle_deg(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
@@ -128,6 +139,47 @@ class ArcheryVisionAnalyzer:
         wrist_to_face = float(np.linalg.norm(draw_wrist_norm - nose_norm))
         phase = self._classify_phase(bow_angle, draw_angle, wrist_to_face, draw_smooth_speed)
 
+        # 5. Full-body stance & posture evaluation (if lower-body keypoints are visible)
+        lower_kps = [KP_L_HIP, KP_R_HIP, KP_L_KNEE, KP_R_KNEE, KP_L_ANKLE, KP_R_ANKLE]
+        has_full_body = keypoints_xy.shape[0] >= 17 and (
+            keypoints_conf is None or all(keypoints_conf[idx] >= self.min_conf for idx in lower_kps)
+        )
+
+        stance_width_ratio = None
+        torso_lean_deg = None
+        hip_offset_ratio = None
+        min_knee_angle = None
+
+        if has_full_body:
+            l_hip, r_hip = keypoints_xy[KP_L_HIP], keypoints_xy[KP_R_HIP]
+            l_knee, r_knee = keypoints_xy[KP_L_KNEE], keypoints_xy[KP_R_KNEE]
+            l_ankle, r_ankle = keypoints_xy[KP_L_ANKLE], keypoints_xy[KP_R_ANKLE]
+
+            shoulder_mid = 0.5 * (l_sh + r_sh)
+            hip_mid = 0.5 * (l_hip + r_hip)
+            ankle_mid = 0.5 * (l_ankle + r_ankle)
+
+            stance_width_ratio = float(np.linalg.norm(r_ankle - l_ankle) / shoulder_width)
+            torso_dx = abs(float(shoulder_mid[0] - hip_mid[0]))
+            torso_dy = max(float(hip_mid[1] - shoulder_mid[1]), 1e-6)
+            torso_lean_deg = float(math.degrees(math.atan2(torso_dx, torso_dy)))
+            hip_offset_ratio = float(abs(hip_mid[0] - ankle_mid[0]) / shoulder_width)
+
+            l_knee_angle = compute_angle_deg(l_hip, l_knee, l_ankle)
+            r_knee_angle = compute_angle_deg(r_hip, r_knee, r_ankle)
+            min_knee_angle = float(min(l_knee_angle, r_knee_angle))
+
+        posture_issues = self._evaluate_posture(
+            shoulder_tilt=shoulder_tilt,
+            bow_angle=bow_angle,
+            phase=phase,
+            has_full_body=has_full_body,
+            stance_width_ratio=stance_width_ratio,
+            torso_lean_deg=torso_lean_deg,
+            hip_offset_ratio=hip_offset_ratio,
+            min_knee_angle=min_knee_angle,
+        )
+
         return ArcheryPoseMetrics(
             bow_elbow_angle=bow_angle,
             draw_elbow_angle=draw_angle,
@@ -135,7 +187,48 @@ class ArcheryVisionAnalyzer:
             bow_hand_steadiness=bow_steadiness,
             draw_smooth_speed=draw_smooth_speed,
             phase=phase,
+            has_full_body=has_full_body,
+            stance_width_ratio=stance_width_ratio,
+            torso_lean_deg=torso_lean_deg,
+            hip_offset_ratio=hip_offset_ratio,
+            min_knee_angle=min_knee_angle,
+            posture_ok=len(posture_issues) == 0,
+            posture_issues=posture_issues,
         )
+
+    def _evaluate_posture(
+        self,
+        shoulder_tilt: float,
+        bow_angle: float,
+        phase: str,
+        has_full_body: bool,
+        stance_width_ratio: float | None,
+        torso_lean_deg: float | None,
+        hip_offset_ratio: float | None,
+        min_knee_angle: float | None,
+    ) -> list[str]:
+        """Evaluate rule-based archery stance and upper-body alignment."""
+        issues: list[str] = []
+
+        if shoulder_tilt > 8.0:
+            issues.append("Uneven shoulders")
+        if phase in ("Draw", "Aim (Hold)") and bow_angle < 150.0:
+            issues.append("Bow arm bent")
+
+        if has_full_body:
+            if stance_width_ratio is not None:
+                if stance_width_ratio < 0.85:
+                    issues.append("Stance too narrow")
+                elif stance_width_ratio > 1.80:
+                    issues.append("Stance too wide")
+            if torso_lean_deg is not None and torso_lean_deg > 10.0:
+                issues.append("Torso leaning")
+            if hip_offset_ratio is not None and hip_offset_ratio > 0.30:
+                issues.append("Weight off-center")
+            if min_knee_angle is not None and min_knee_angle < 160.0:
+                issues.append("Knees bent")
+
+        return issues
 
     def _classify_phase(
         self, bow_angle: float, draw_angle: float, wrist_to_face: float, smooth_speed: float

@@ -24,7 +24,7 @@ PHASE_COLORS = {
 def draw_hud(frame, metrics: ArcheryPoseMetrics | None, fps: float) -> None:
     """Render biomechanical overlay box on top-left of frame."""
     overlay = frame.copy()
-    cv2.rectangle(overlay, (10, 10), (360, 185), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (10, 10), (390, 235), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
 
     cv2.putText(frame, f"Archery YOLO-Pose | FPS: {fps:.1f}", (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -33,7 +33,7 @@ def draw_hud(frame, metrics: ArcheryPoseMetrics | None, fps: float) -> None:
         cv2.putText(frame, "Status: No full upper-body pose", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (100, 180, 255), 1)
         cv2.putText(frame, "Tip: Step back so shoulders & wrists", (20, 105), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         cv2.putText(frame, "     are clearly visible.", (20, 128), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(frame, "Press 'q' or ESC to quit", (20, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
+        cv2.putText(frame, "Press 'q' or ESC to quit", (20, 215), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
         return
 
     color = PHASE_COLORS.get(metrics.phase, (255, 255, 255))
@@ -41,10 +41,23 @@ def draw_hud(frame, metrics: ArcheryPoseMetrics | None, fps: float) -> None:
     cv2.putText(frame, f"Bow Elbow:     {metrics.bow_elbow_angle:5.1f} deg", (20, 98), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
     cv2.putText(frame, f"Draw Elbow:    {metrics.draw_elbow_angle:5.1f} deg", (20, 122), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
     cv2.putText(frame, f"Shoulder Tilt: {metrics.shoulder_tilt_deg:5.1f} deg", (20, 146), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+
+    issues = metrics.posture_issues or []
+    if not metrics.has_full_body and metrics.posture_ok:
+        posture_text = "Stance: Partial (no legs)"
+        posture_color = (180, 200, 220)
+    elif metrics.posture_ok:
+        posture_text = "Stance: Correct"
+        posture_color = (0, 255, 0)
+    else:
+        posture_text = f"Stance: {', '.join(issues[:2])}"
+        posture_color = (0, 100, 255)
+
+    cv2.putText(frame, posture_text, (20, 174), cv2.FONT_HERSHEY_SIMPLEX, 0.55, posture_color, 2)
     cv2.putText(
         frame,
         f"Tremor (std):  {metrics.bow_hand_steadiness:.4f} | q=quit",
-        (20, 170),
+        (20, 205),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.5,
         (210, 210, 210),
