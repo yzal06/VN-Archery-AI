@@ -1,0 +1,12 @@
+services:
+  archery-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vn-archery-ai:latest
+    container_name: vn-archery-ai
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

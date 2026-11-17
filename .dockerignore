@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Local PyTorch weights (keep web/models/yolo11n-pose.onnx)
+*.pt
+*.pth
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

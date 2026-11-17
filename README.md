@@ -27,3 +27,14 @@ python webcam_yolo_demo.py --bow-side left
   1. Push this repository to GitHub (`.gitignore` excludes `*.pt`, keeping `web/models/yolo11n-pose.onnx`).
   2. In GitHub repo **Settings → Pages**, deploy from branch `main` (root `/` or `/web` — if root `/`, open `https://<username>.github.io/<repo>/web/`).
   3. Open that HTTPS URL on your phone browser and allow camera access.
+
+## 3. Run & Test with Docker
+- **Run ML baseline verification and start the Web ONNX server (`http://localhost:8000`):**
+  ```powershell
+  docker compose up --build
+  ```
+  *(If using Docker Compose v1, run `docker-compose up --build`.)*
+- **Run only the Python baseline test (`main_demo.py`):**
+  ```powershell
+  docker run --rm vn-archery-ai:latest python main_demo.py
+  ```
